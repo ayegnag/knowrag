@@ -13,9 +13,9 @@ const envSchema = z.object({
   OLLAMA_CHAT_MODEL: z.string().default('llama3.1:8b'),
   OLLAMA_EMBEDDING_MODEL: z.string().default('nomic-embed-text'),
 
-  PINECONE_API_KEY: z.string(),
-  PINECONE_INDEX_NAME: z.string().default('onboarding-rag'),
-  PINECONE_NAMESPACE: z.string().optional().default('default'),
+  VECTOR_DB: z.enum(['qdrant']).default('qdrant'),  // for now only qdrant; extend later
+  QDRANT_URL: z.string().url().default('http://localhost:6333'),
+  QDRANT_COLLECTION_NAME: z.string().default('knowrag'),
 
   SECURITY_CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.75),
 });

@@ -1,4 +1,4 @@
-onboarding-rag-chatbot/
+knowrag-chatbot/
 ├── src/                        # All source code lives here
 │   ├── config/                 # Centralized configuration & env handling
 │   │   ├── index.ts
@@ -36,9 +36,12 @@ onboarding-rag-chatbot/
 │   │       └── securityPipeline.ts   # orchestrates the 3-stage pipeline
 │   │
 │   ├── services/               # Cross-cutting / infrastructure services
-│   │   ├── pinecone/
-│   │   │   ├── pinecone.client.ts
-│   │   │   └── pinecone.service.ts     # upsert, query, list indexes, etc.
+│   │   ├── vector-db/
+│   │   │   │   ├── qdrant
+│   │   │   │   │   ├── qdrant.client.ts
+│   │   │   │   │   └── qdrant.service.ts     # upsert, query, list indexes, etc.
+│   │   │   │   ├── vector-db.interface.ts
+│   │   │   │   └── vector-db.factory.ts
 │   │   ├── llm/
 │   │   │   ├── openai/
 │   │   │   │   ├── openaiEmbedding.ts

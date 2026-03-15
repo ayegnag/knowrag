@@ -3,7 +3,7 @@ import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
 import env from './config/env.js';
 import { llm } from './config/llm-providers.js';
-import { pineconeService } from './services/pinecone/pinecone.service.js';
+import { vectorDB } from './services/vector-db/qdrant/qdrant.service.js';
 
 // We'll import these later as we build modules
 // import chatRouter from './modules/chat/chat.routes';
@@ -46,7 +46,7 @@ app.get('/health', (req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
     environment: env.NODE_ENV,
     llmProvider: env.LLM_PROVIDER,
-    pineconeIndex: env.PINECONE_INDEX_NAME,
+    collection: env.QDRANT_COLLECTION_NAME
   });
 });
 
@@ -72,7 +72,7 @@ app.get('/version', (req: Request, res: Response) => {
 // Placeholder route to confirm server is running
 app.get('/', (req: Request, res: Response) => {
   res.status(200).json({
-    message: 'RAG Onboarding Chatbot API',
+    message: 'RAG-powered AI Chatbot API',
     docs: 'Endpoints will appear under /api/*',
     health: '/health',
     ping: '/ping',
@@ -115,22 +115,23 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 // ────────────────────────────────────────────────
-// Pinecone Health Check Endpoint
+// Vector-DB / Qdrant Health Check Endpoint
 // ────────────────────────────────────────────────
 
-app.get('/health/pinecone', async (req: Request, res: Response) => {
+app.get('/health/vector-db', async (req: Request, res: Response) => {
   try {
-    const status = await pineconeService.healthCheck();
+    const status = await vectorDB.healthCheck();
     res.status(200).json({
       ...status,
-      llmProvider: env.LLM_PROVIDER,
+      collection: env.QDRANT_COLLECTION_NAME,
+      url: env.QDRANT_URL,
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) {
     res.status(503).json({
       status: 'error',
       message: err.message,
-      indexName: env.PINECONE_INDEX_NAME,
+      collection: env.QDRANT_COLLECTION_NAME,
     });
   }
 });
@@ -143,7 +144,7 @@ const server = app.listen(port, () => {
   console.log(`🚀 Server running at http://localhost:${port}`);
   console.log(`   Environment   : ${env.NODE_ENV}`);
   console.log(`   LLM Provider  : ${env.LLM_PROVIDER}`);
-  console.log(`   Pinecone Index: ${env.PINECONE_INDEX_NAME}`);
+  console.log(`   Qdrant Collection: ${env.QDRANT_COLLECTION_NAME}`);
 });
 
 // Graceful shutdown
