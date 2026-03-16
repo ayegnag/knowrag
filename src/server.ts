@@ -79,6 +79,59 @@ app.get('/', (req: Request, res: Response) => {
   });
 });
 
+
+// ────────────────────────────────────────────────
+// Vector-DB / Qdrant Health Check Endpoint
+// ────────────────────────────────────────────────
+
+app.get('/health/vector-db', async (req: Request, res: Response) => {
+  try {
+    const status = await vectorDB.healthCheck();
+    res.status(200).json({
+      ...status,
+      collection: env.QDRANT_COLLECTION_NAME,
+      url: env.QDRANT_URL,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (err: any) {
+    res.status(503).json({
+      status: 'error',
+      message: err.message,
+      collection: env.QDRANT_COLLECTION_NAME,
+    });
+  }
+});
+
+// Test endpoint for Ollama
+app.get('/test-ollama', async (req: Request, res: Response) => {
+  if (env.LLM_PROVIDER !== 'ollama') {
+    return res.status(400).json({ error: 'Set LLM_PROVIDER=ollama in .env' });
+  }
+
+  try {
+    const embedding = await llm.generateEmbedding('Hello, this is a test sentence.');
+
+    const chatMessages = [{ role: 'user' as const, content: 'Say hello in Spanish' }];
+    const chat = await llm.generateChatCompletion(chatMessages);
+
+    // Log raw for debug
+    // console.log('Raw chat response from OllamaProvider:', JSON.stringify(chat, null, 2));
+    // console.log('Embedding:', embedding);
+    res.json({
+      embeddingLength: Array.isArray(embedding[0]) ? embedding[0].length : embedding.length,
+      embeddingSample: Array.isArray(embedding[0])
+        ? embedding[0].slice(0, 5)
+        : embedding.slice(0, 5),
+      isBatch: Array.isArray(embedding[0]),
+      chatResponse: chat?.choices?.[0]?.message?.content || 'No content',
+      rawChat: chat,
+    });
+  } catch (err: any) {
+    console.error('Test endpoint error:', err);
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 // ────────────────────────────────────────────────
 // 404 Handler
 // ────────────────────────────────────────────────
@@ -112,28 +165,6 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     error: message,
     ...(env.NODE_ENV !== 'production' && { stack: err.stack }),
   });
-});
-
-// ────────────────────────────────────────────────
-// Vector-DB / Qdrant Health Check Endpoint
-// ────────────────────────────────────────────────
-
-app.get('/health/vector-db', async (req: Request, res: Response) => {
-  try {
-    const status = await vectorDB.healthCheck();
-    res.status(200).json({
-      ...status,
-      collection: env.QDRANT_COLLECTION_NAME,
-      url: env.QDRANT_URL,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (err: any) {
-    res.status(503).json({
-      status: 'error',
-      message: err.message,
-      collection: env.QDRANT_COLLECTION_NAME,
-    });
-  }
 });
 
 // ────────────────────────────────────────────────
