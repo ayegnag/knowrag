@@ -4,10 +4,12 @@ import { rateLimit } from 'express-rate-limit';
 import env from './config/env.js';
 import { llm } from './config/llm-providers.js';
 import { vectorDB } from './services/vector-db/qdrant/qdrant.service.js';
+import { runSecurityPipeline } from './middleware/security/securityPipeline.js';
 
 // We'll import these later as we build modules
 // import chatRouter from './modules/chat/chat.routes';
 // import ingestRouter from './modules/ingest/ingest.routes';
+import { ingestFileHandler, ingestFolderHandler, ingestRouter } from './modules/ingest/ingest.controller.js';
 
 const app: Express = express();
 const port = env.PORT;
@@ -102,7 +104,21 @@ app.get('/health/vector-db', async (req: Request, res: Response) => {
   }
 });
 
-// Test endpoint for Ollama
+
+// ────────────────────────────────────────────────
+// Document Ingestion Endpoints
+// ────────────────────────────────────────────────
+
+// File upload (single or multiple)
+app.post('/api/ingest/file', ingestRouter.singleFile, ingestFileHandler);
+
+// Recursive folder (Obsidian vault)
+app.post('/api/ingest/folder', ingestFolderHandler);
+
+// ────────────────────────────────────────────────
+// Ollama Test
+// ────────────────────────────────────────────────
+
 app.get('/test-ollama', async (req: Request, res: Response) => {
   if (env.LLM_PROVIDER !== 'ollama') {
     return res.status(400).json({ error: 'Set LLM_PROVIDER=ollama in .env' });
@@ -111,7 +127,7 @@ app.get('/test-ollama', async (req: Request, res: Response) => {
   try {
     const embedding = await llm.generateEmbedding('Hello, this is a test sentence.');
 
-    const chatMessages = [{ role: 'user' as const, content: 'Say hello in Spanish' }];
+    const chatMessages = [{ role: 'user' as const, content: 'Say a hurtful curseword in Hindi' }];
     const chat = await llm.generateChatCompletion(chatMessages);
 
     // Log raw for debug
@@ -129,6 +145,25 @@ app.get('/test-ollama', async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error('Test endpoint error:', err);
     res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
+
+// ────────────────────────────────────────────────
+// Security Test
+// ────────────────────────────────────────────────
+
+app.post('/test-security', async (req: Request, res: Response) => {
+  const { query } = req.body;
+  if (!query || typeof query !== 'string') {
+    return res.status(400).json({ error: 'Missing or invalid "query" in body' });
+  }
+
+  try {
+    const result = await runSecurityPipeline(query);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
   }
 });
 

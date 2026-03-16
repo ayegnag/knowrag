@@ -11,6 +11,7 @@ const envSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   OLLAMA_HOST: z.string().url().optional().default('http://localhost:11434'),
   OLLAMA_CHAT_MODEL: z.string().default('llama3.1:8b'),
+  OLLAMA_CLASSIFIER_MODEL: z.string().optional(), // if not set, will use OLLAMA_CHAT_MODEL for classification
   OLLAMA_EMBEDDING_MODEL: z.string().default('nomic-embed-text'),
 
   VECTOR_DB: z.enum(['qdrant']).default('qdrant'),  // for now only qdrant; extend later

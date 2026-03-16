@@ -12,7 +12,7 @@ export interface LLMProvider {
     options?: { stream?: boolean; temperature?: number; max_tokens?: number }
   ): Promise<any>; // We'll refine return type later when using
 
-  generateEmbedding(text: string | string[]): Promise<number[] | number[][]>;
+  generateEmbedding(text: string | string[]): Promise<number[]>;
 }
 
 // ────────────────────────────────────────────────
@@ -143,31 +143,55 @@ class OllamaProvider implements LLMProvider {
     };
   }
 
-  async generateEmbedding(text: string | string[]): Promise<number[] | number[][]> {
-    const inputTexts = Array.isArray(text) ? text : [text];
-    const results: number[][] = [];
+  // async generateEmbedding(text: string | string[]): Promise<number[] | number[][]> {
+  //   const inputTexts = Array.isArray(text) ? text : [text];
+  //   const results: number[][] = [];
 
-    for (const chunk of inputTexts) {
-      const payload = {
-        model: env.OLLAMA_EMBEDDING_MODEL,
-        input: chunk,
-      };
+  //   for (const chunk of inputTexts) {
+  //     const payload = {
+  //       model: env.OLLAMA_EMBEDDING_MODEL,
+  //       input: chunk,
+  //     };
 
-      const data = await this.callOllama<any>('/api/embed', payload, false);
+  //     const data = await this.callOllama<any>('/api/embed', payload, false);
 
-      // Ollama returns { embeddings: number[][] } even for single input
-      if (!data || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
-        console.error('Invalid embedding response from Ollama:', data);
-        throw new Error('Ollama embedding response missing or invalid "embeddings" field');
-      }
+  //     // Ollama returns { embeddings: number[][] } even for single input
+  //     if (!data || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
+  //       console.error('Invalid embedding response from Ollama:', data);
+  //       throw new Error('Ollama embedding response missing or invalid "embeddings" field');
+  //     }
 
-      // Take the first (and only) embedding vector for this chunk
-      results.push(data.embeddings[0]);
+  //     // Take the first (and only) embedding vector for this chunk
+  //     results.push(data.embeddings[0]);
+  //   }
+
+  //   // Return flat array for single input, array of arrays for batch
+  //   return inputTexts.length === 1 ? results[0] : results;
+  // }
+
+  async generateEmbedding(text: string | string[]): Promise<number[]> {
+  const inputTexts = Array.isArray(text) ? text : [text];
+  const results: number[][] = [];
+
+  for (const chunk of inputTexts) {
+    const payload = {
+      model: env.OLLAMA_EMBEDDING_MODEL,
+      input: chunk,
+    };
+
+    const data = await this.callOllama<any>('/api/embed', payload, false);
+
+    if (!data || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
+      throw new Error(`Invalid embedding response: ${JSON.stringify(data)}`);
     }
 
-    // Return flat array for single input, array of arrays for batch
-    return inputTexts.length === 1 ? results[0] : results;
+    results.push(data.embeddings[0]);  // always take first vector
   }
+
+  // For single input → return flat array
+  // For batch → return array of vectors (but you don't use batch right now)
+  return inputTexts.length === 1 ? results[0] : results.flat();
+}
   // async generateEmbedding(text: string | string[]): Promise<number[]> {
   //   const inputTexts = Array.isArray(text) ? text : [text];
   //   const results: number[][] = [];
