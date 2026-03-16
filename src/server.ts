@@ -5,6 +5,7 @@ import env from './config/env.js';
 import { llm } from './config/llm-providers.js';
 import { vectorDB } from './services/vector-db/qdrant/qdrant.service.js';
 import { runSecurityPipeline } from './middleware/security/securityPipeline.js';
+import { chatHandler } from './modules/chat/chat.controller.js';
 
 // We'll import these later as we build modules
 // import chatRouter from './modules/chat/chat.routes';
@@ -36,6 +37,12 @@ const limiter = rateLimit({
   legacyHeaders: false,
 });
 app.use(limiter);
+
+// ────────────────────────────────────────────────
+// Static Pages
+// ────────────────────────────────────────────────
+
+app.use(express.static('public'));
 
 // ────────────────────────────────────────────────
 // Health & debug endpoints
@@ -104,6 +111,11 @@ app.get('/health/vector-db', async (req: Request, res: Response) => {
   }
 });
 
+// ────────────────────────────────────────────────
+// Chat Endpoint
+// ────────────────────────────────────────────────
+
+app.post('/api/chat', chatHandler);
 
 // ────────────────────────────────────────────────
 // Document Ingestion Endpoints

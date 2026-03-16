@@ -104,14 +104,56 @@ class OllamaProvider implements LLMProvider {
       stream: options.stream,
     };
 
+    // if (options.stream) {
+    //   // Streaming: return raw axios response for caller to handle
+    //   const response = await axios.post(
+    //     `${this.baseUrl}/api/chat`,
+    //     payload,
+    //     { responseType: 'stream' }
+    //   );
+    //   return response; // Later: pipe to client or collect chunks
+    // }
     if (options.stream) {
-      // Streaming: return raw axios response for caller to handle
-      const response = await axios.post(
+      return await axios.post(
         `${this.baseUrl}/api/chat`,
         payload,
         { responseType: 'stream' }
       );
-      return response; // Later: pipe to client or collect chunks
+
+      // To collect steamed response in a Promise (alternative approach):
+      // return new Promise(async (resolve, reject) => {
+      //   const response = await axios.post(
+      //     `${this.baseUrl}/api/chat`,
+      //     payload,
+      //     { responseType: 'stream' }
+      //   );
+      //   console.log('[Generate-ChatCompletion] Response:', response);
+      //   let fullContent = '';
+      //   response.data.on('data', (chunk: Buffer) => {
+      //     const lines = chunk.toString().split('\n');
+      //     console.log('[Generate-ChatCompletion] Received chunk:', chunk.toString());
+      //     for (const line of lines) {
+      //       if (line.trim() === '') continue;
+      //       try {
+      //         const parsed = JSON.parse(line);
+      //         if (parsed.message?.content) {
+      //           fullContent += parsed.message.content;
+      //         }
+      //         if (parsed.done) {
+      //           resolve({
+      //             choices: [{ message: { role: 'assistant', content: fullContent.trim() } }],
+      //           });
+      //         }
+      //       } catch (e) {
+      //         console.warn('Stream parse error:', e);
+      //       }
+      //     }
+      //   });
+      //   response.data.on('error', reject);
+      //   response.data.on('end', () => {
+      //     if (!fullContent) reject(new Error('Empty stream response'));
+      //   });
+      // });
     }
 
     // Non-streaming: get full response
@@ -170,28 +212,28 @@ class OllamaProvider implements LLMProvider {
   // }
 
   async generateEmbedding(text: string | string[]): Promise<number[]> {
-  const inputTexts = Array.isArray(text) ? text : [text];
-  const results: number[][] = [];
+    const inputTexts = Array.isArray(text) ? text : [text];
+    const results: number[][] = [];
 
-  for (const chunk of inputTexts) {
-    const payload = {
-      model: env.OLLAMA_EMBEDDING_MODEL,
-      input: chunk,
-    };
+    for (const chunk of inputTexts) {
+      const payload = {
+        model: env.OLLAMA_EMBEDDING_MODEL,
+        input: chunk,
+      };
 
-    const data = await this.callOllama<any>('/api/embed', payload, false);
+      const data = await this.callOllama<any>('/api/embed', payload, false);
 
-    if (!data || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
-      throw new Error(`Invalid embedding response: ${JSON.stringify(data)}`);
+      if (!data || !Array.isArray(data.embeddings) || data.embeddings.length === 0) {
+        throw new Error(`Invalid embedding response: ${JSON.stringify(data)}`);
+      }
+
+      results.push(data.embeddings[0]);  // always take first vector
     }
 
-    results.push(data.embeddings[0]);  // always take first vector
+    // For single input → return flat array
+    // For batch → return array of vectors (but you don't use batch right now)
+    return inputTexts.length === 1 ? results[0] : results.flat();
   }
-
-  // For single input → return flat array
-  // For batch → return array of vectors (but you don't use batch right now)
-  return inputTexts.length === 1 ? results[0] : results.flat();
-}
   // async generateEmbedding(text: string | string[]): Promise<number[]> {
   //   const inputTexts = Array.isArray(text) ? text : [text];
   //   const results: number[][] = [];
