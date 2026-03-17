@@ -3,7 +3,7 @@ import cors from 'cors';
 import { rateLimit } from 'express-rate-limit';
 import env from './config/env.js';
 import { llm } from './config/llm-providers.js';
-import { vectorDB } from './services/vector-db/qdrant/qdrant.service.js';
+import { vectorDB } from './services/vector-db/qdrant/qdrant.service.ts';
 import { runSecurityPipeline } from './middleware/security/securityPipeline.js';
 import { chatHandler } from './modules/chat/chat.controller.js';
 

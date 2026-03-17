@@ -1,10 +1,11 @@
-import { vectorDB } from '../../services/vector-db/qdrant/qdrant.service.js';
+import { vectorDB } from '../../services/vector-db/qdrant/qdrant.service.ts';
 import { llm } from '../../config/llm-providers.js';
 import { parseDocument } from './documentParser.js';
 import { chunkText } from './chunker.js';
 import { readdir, stat } from 'fs/promises';
 import { join, extname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { generateSparseVector } from './bm25.js';
 
 const SUPPORTED_EXT = ['.md', '.pdf', '.docx', '.txt'];
 const IGNORE_DIRS = ['.obsidian', 'attachments', 'node_modules', '.git'];
@@ -41,12 +42,18 @@ export const ingestService = {
     const chunks = chunkText(parsed.content);
     console.log('[Ingest] Created chunks:', chunks.length);
 
+    // Prepare folder heirarchy from file path for metadata
+    const relativePath = file.path || file.originalname; // full path from vault root
+    const pathParts = relativePath.split(/[\\/]/).filter(Boolean);
+    const parentFolders = pathParts.slice(0, -1); // everything except filename
     const vectors = [];
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
       let embedding;
+      let sparseVector;
       try {
         embedding = await llm.generateEmbedding(chunk);
+        sparseVector = generateSparseVector(chunk);
         console.log(`[Ingest] Embedding for chunk ${i}: length = ${embedding.length}`);
       } catch (err: any) {
         console.error(`[Ingest] Embedding failed for chunk ${i}:`, err.message);
@@ -57,11 +64,17 @@ export const ingestService = {
         // id: `${parsed.metadata.fileName || 'unknown'}-chunk-${i}`,
         id: uuidv4(),
         vector: embedding,
+        sparse_vector: {
+          bm25: sparseVector
+        },
         payload: {
           ...parsed.metadata,
           chunkIndex: i,
-          text: chunk,
+          text: chunk.slice(0, 1500),
           totalChunks: chunks.length,
+          relativePath,
+          parentFolders,                    // array like ["Crafts", "3D Printed"]
+          topicHint: parentFolders.slice(-2).join(' > '), // e.g. "Crafts > 3D Printed"
         },
       });
     }

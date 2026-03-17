@@ -1,8 +1,9 @@
 import { Response } from 'express';
 import { runSecurityPipeline } from '../../middleware/security/securityPipeline.js';
-import { vectorDB } from '../../services/vector-db/qdrant/qdrant.service.js';
+import { vectorDB } from '../../services/vector-db/qdrant/qdrant.service.ts';
 import { llm } from '../../config/llm-providers.js';
 import env from '../../config/env.js';
+import { generateSparseVector } from '../ingest/bm25.ts';
 
 export const chatService = {
     async processChat(userMessage: string, history: Array<{ role: string; content: string }>, stream = false) {
@@ -20,23 +21,37 @@ export const chatService = {
 
         // Step 2: Embed the user query
         const queryEmbedding = await llm.generateEmbedding(userMessage);
+        const querySparse = generateSparseVector(userMessage);
 
-        // Step 3: Retrieve relevant chunks from Qdrant
+        // Step 3: Hybrid retrieval of relevant chunks from Qdrant (Dense + BM25 Sparse + RRF)
         const retrieval = await vectorDB.query({
             vector: queryEmbedding,
+            sparseVector: {
+                bm25: querySparse
+            },
+            // fusion: 'rrf',  // Reciprocal Rank Fusion
             limit: 5,                  // top-5 chunks
             withPayload: true,
             withVector: false,
         });
 
+        // const contexts = retrieval.results
+        //     .filter(r => r.score > 0.65)  // cosine similarity threshold – adjust as needed
+        //     .map(r => r.payload?.text || '')
+        //     .filter(Boolean);
+
+        // if (contexts.length === 0) {
+        //     contexts.push('No relevant knowledge found in the personal documents.');
+        // }
         const contexts = retrieval.results
-            .filter(r => r.score > 0.65)  // cosine similarity threshold – adjust as needed
-            .map(r => r.payload?.text || '')
+            .filter((r: { score: any; }) => (r.score || 0) > 0.55)
+            .map((r: { payload: any; }) => {
+                const p = r.payload as any;
+                const folderContext = p.topicHint ? `(${p.topicHint}) ` : '';
+                return `${folderContext}${p.text || ''}`;
+            })
             .filter(Boolean);
 
-        if (contexts.length === 0) {
-            contexts.push('No relevant knowledge found in the personal documents.');
-        }
 
         // Step 4: Build prompt with context + history
         const systemPrompt = `
@@ -92,7 +107,7 @@ Answer concisely and professionally.
                                 res.write(`data: ${JSON.stringify({ done: true, fullReply })}\n\n`);
                                 res.end();
                             }
-                        } catch(err: any) {
+                        } catch (err: any) {
                             console.warn('[ProcessChat - Stream] error:', err);
                         }
                     }
@@ -120,7 +135,7 @@ Answer concisely and professionally.
             blocked: false,
             reply: assistantReply,
             retrievedChunks: contexts.length,
-            retrievalScores: retrieval.results.map(r => r.score),
+            retrievalScores: retrieval.results.map((r: { score: any; }) => r.score),
             usedContext: contexts,
             debug: { security, messagesLength: messages.length },
         };

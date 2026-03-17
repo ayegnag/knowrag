@@ -17,10 +17,14 @@ export interface VectorDBProvider {
    */
   query(params: {
     vector: number[];
+    sparseVector?: {
+      bm25?: Record<string, number>;  // optional BM25 sparse vector
+    };
     limit?: number;
     filter?: Record<string, any>;
     withPayload?: boolean;
     withVector?: boolean;
+    fusion?: 'rrf' | 'dense' | 'sparse';
   }): Promise<{
     results: Array<{
       id: string | number;

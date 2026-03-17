@@ -1,5 +1,5 @@
 import env from '../../config/env.js';
-import { vectorDB } from './qdrant/qdrant.service.js'; // currently only qdrant
+import { vectorDB } from './qdrant/qdrant.service.ts'; // currently only qdrant
 
 // Later: switch based on env.VECTOR_DB
 export function getVectorDB() {
