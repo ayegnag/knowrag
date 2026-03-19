@@ -49,10 +49,10 @@ export const chatService = {
                 const p = r.payload as any || {};
                 const score = r.score || 0;
 
-                // Optional: small boost for folder match (very soft)
+                // Optional soft boost (keep it light)
                 let boost = 0;
                 if (p.topicHint && userMessage.toLowerCase().includes(p.topicHint.toLowerCase().split(' > ').pop() || '')) {
-                    boost = 0.1;  // tiny boost if query mentions last folder name
+                    boost = 0.08;  // tiny nudge
                 }
 
                 return {
@@ -63,19 +63,15 @@ export const chatService = {
                     fullPath: p.relativePath || 'unknown',
                 };
             })
-            .filter(c => c.text && c.score > 0.45)  // lowered threshold, only filter empty text
+            .filter(c => c.text.trim().length > 30)  // only drop junk
             .sort((a, b) => b.score - a.score)
-            .slice(0, 8)  // allow more context
-            .map(c => {
-                const header = c.topic !== 'unknown' ? `[${c.topic}] ${c.file}` : c.file;
-                return `From ${header}:\n${c.text}\n(score: ${c.score.toFixed(3)})`;
-            });
+            .slice(0, 12);  // take up to 12 — plenty for most prompts
 
-        // Log EVERYTHING being sent to LLM
-        console.log(`[RAG Context] Retrieved ${contexts.length} chunks (top scores shown)`);
-        contexts.forEach((ctx, idx) => {
-            console.log(`Chunk ${idx + 1}:`);
-            console.log(ctx.slice(0, 300) + (ctx.length > 300 ? '...' : '')); // truncate long chunks
+        // Log all kept chunks
+        console.log(`[RAG Context] Kept ${contexts.length} chunks after sorting (no hard score filter)`);
+        contexts.forEach((c, i) => {
+            console.log(`Chunk ${i + 1} (${c.score.toFixed(3)}): ${c.topic} / ${c.file}`);
+            console.log(c.text.slice(0, 150) + (c.text.length > 150 ? '...' : ''));
             console.log('---');
         });
 
@@ -88,9 +84,11 @@ If unsure, say so clearly.
 Answer concisely and professionally.
     `.trim();
 
-        const contextBlock = contexts.length > 0
-            ? `Relevant context from documents:\n${contexts.join('\n\n---\n\n')}`
-            : 'No specific context found.';
+        const contextBlock = contexts.length
+            ? `Relevant context from your Obsidian notes (sorted by relevance, with folder paths):\n\n` +
+            contexts.map(c => `From ${c.topic} / ${c.file} (score: ${c.score.toFixed(3)}):\n${c.text}`).join('\n\n---\n\n')
+            : 'No sufficiently relevant notes found.';
+        console.log(`[RAG Prompt] Sending ${contexts.length} chunks to LLM (total context length: ${contextBlock.length})`);
 
         const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
             { role: 'system', content: systemPrompt + '\n\n' + contextBlock },
