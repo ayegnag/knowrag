@@ -26,88 +26,101 @@ async function walkDir(dir: string): Promise<string[]> {
 }
 
 export const ingestService = {
-  async ingestFile(file: Express.Multer.File | { path: string; originalname: string; buffer?: Buffer }) {
-    console.log('[Ingest] Starting file:', file.originalname || file.path);
+  async ingestFile(file: any) {
+    console.log(`[Ingest] === STARTING FILE ===`);
+    console.log(`[Ingest] Full path received : ${file.path || '(no path)'}`);
+    console.log(`[Ingest] originalname      : ${file.originalname}`);
+    console.log(`[Ingest] buffer length     : ${file.buffer?.length || 0}`);
 
     let parsed;
     try {
       parsed = await parseDocument(file);
-      console.log('[Ingest] Parsed content length:', parsed.content.length);
-      console.log('[Ingest] Metadata keys:', Object.keys(parsed.metadata));
+      console.log(`[Ingest] Parsed length     : ${parsed.content.length}`);
+      console.log(`[Ingest] Metadata keys     : ${Object.keys(parsed.metadata)}`);
     } catch (err: any) {
-      console.error('[Ingest] Parse failed:', err.message);
+      console.error(`[Ingest] Parse failed     : ${err.message}`);
       throw err;
     }
 
     const chunks = chunkText(parsed.content);
-    console.log('[Ingest] Created chunks:', chunks.length);
+    console.log(`[Ingest] Created chunks    : ${chunks.length}`);
 
-    // Prepare folder heirarchy from file path for metadata
-    const relativePath = file.path || file.originalname; // full path from vault root
-    const pathParts = relativePath.split(/[\\/]/).filter(Boolean);
-    const parentFolders = pathParts.slice(0, -1); // everything except filename
+    // === PATH PARSING (fixed) ===
+    const fullPath = file.path || file.originalname || '';
+    console.log(`[Ingest] Using fullPath    : ${fullPath}`);
+
+    const pathParts = fullPath.split(/[/\\]/).filter(Boolean);
+    const fileName = pathParts.pop() || 'unknown.md';
+    const parentFolders = pathParts;
+
+    const relativePath = parentFolders.length
+      ? parentFolders.join(' > ') + ' > ' + fileName
+      : fileName;
+
+    const topicHint = parentFolders.slice(-3).join(' > ') + ' > ' + fileName; // last 3 folders and file name
+
+    console.log(`[Ingest] Parsed Folders    : [${parentFolders.join(', ')}]`);
+    console.log(`[Ingest] topicHint         : "${topicHint}"`);
+    console.log(`[Ingest] relativePath      : "${relativePath}"`);
+
+    // === UPSERT ===
     const vectors = [];
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
-      let embedding;
-      let sparseVector;
-      try {
-        embedding = await llm.generateEmbedding(chunk);
-        sparseVector = generateSparseVector(chunk);
-        console.log(`[Ingest] Embedding for chunk ${i}: length = ${embedding.length}`);
-      } catch (err: any) {
-        console.error(`[Ingest] Embedding failed for chunk ${i}:`, err.message);
-        throw new Error(`Embedding failed: ${err.message}`);
-      }
+      const embedding = await llm.generateEmbedding(chunk);
+      const sparseVector = generateSparseVector(chunk);
 
       vectors.push({
-        // id: `${parsed.metadata.fileName || 'unknown'}-chunk-${i}`,
         id: uuidv4(),
         vector: embedding,
-        sparse_vector: {
-          bm25: sparseVector
-        },
+        sparse_vector: { bm25: sparseVector },
         payload: {
           ...parsed.metadata,
           chunkIndex: i,
-          text: chunk.slice(0, 1500),
+          text: chunk,
           totalChunks: chunks.length,
+          originalFileName: fileName,
           relativePath,
-          parentFolders,                    // array like ["Crafts", "3D Printed"]
-          topicHint: parentFolders.slice(-2).join(' > '), // e.g. "Crafts > 3D Printed"
+          parentFolders,
+          topicHint,
         },
       });
     }
 
-    console.log('[Ingest] Prepared vectors:', vectors.length);
+    console.log(`[Ingest] Prepared ${vectors.length} vectors for upsert`);
+    const upsertResult = await vectorDB.upsert(vectors);
+    console.log(`[Ingest] Upsert completed: `, upsertResult);
 
-    try {
-      const upsertResult = await vectorDB.upsert(vectors);
-      console.log('[Ingest] Upsert success:', upsertResult);
-      return { success: true, file: parsed.metadata.fileName, chunksIngested: chunks.length };
-    } catch (err: any) {
-      console.error('[Ingest] Upsert failed:', err);
-      console.error('[Ingest] Error details:', err.message, err.stack);
-      throw new Error(`Upsert failed: ${err.message}`);
-    }
+    return { success: true, file: fileName, chunksIngested: chunks.length };
   },
 
   async ingestFolder(folderPath: string) {
     const files = await walkDir(folderPath);
     const results = [];
 
-    for (const filePath of files) {
+    for(const filePath of files) {
       console.log('[Ingest Folder] Processing:', filePath);
+
       try {
+        let buffer;
+        try {
+          buffer = await import('fs/promises').then(fs => fs.readFile(filePath));
+          console.log(`[Ingest Folder] Read file OK: ${filePath} (${buffer.length} bytes)`);
+        } catch (readErr: any) {
+          console.error(`[Ingest Folder] readFile FAILED for ${filePath}: ${readErr.message}`);
+          throw readErr;  // re-throw so outer catch sees it
+        }
+
         const file = {
-          originalname: filePath.split('/').pop()!,
-          buffer: await import('fs/promises').then(fs => fs.readFile(filePath)),
+          path: filePath,
+          originalname: filePath.split(/[/\\]/).pop() || 'unknown.md',
+          buffer,
         } as any;
 
         const result = await this.ingestFile(file);
         results.push(result);
       } catch (err: any) {
-        console.error('[Ingest Folder] Failed on file:', filePath, err.message);
+        console.error('[Ingest Folder] Failed on file:', filePath, err.message, err.code || '');
         results.push({ file: filePath, error: err.message });
       }
     }

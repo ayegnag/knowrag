@@ -30,7 +30,8 @@ export const chatService = {
                 bm25: querySparse
             },
             // fusion: 'rrf',  // Reciprocal Rank Fusion
-            limit: 5,                  // top-5 chunks
+            limit: 12,                  // prev: top-5 chunks
+            filter: undefined,
             withPayload: true,
             withVector: false,
         });
@@ -44,14 +45,39 @@ export const chatService = {
         //     contexts.push('No relevant knowledge found in the personal documents.');
         // }
         const contexts = retrieval.results
-            .filter((r: { score: any; }) => (r.score || 0) > 0.55)
-            .map((r: { payload: any; }) => {
-                const p = r.payload as any;
-                const folderContext = p.topicHint ? `(${p.topicHint}) ` : '';
-                return `${folderContext}${p.text || ''}`;
-            })
-            .filter(Boolean);
+            .map(r => {
+                const p = r.payload as any || {};
+                const score = r.score || 0;
 
+                // Optional: small boost for folder match (very soft)
+                let boost = 0;
+                if (p.topicHint && userMessage.toLowerCase().includes(p.topicHint.toLowerCase().split(' > ').pop() || '')) {
+                    boost = 0.1;  // tiny boost if query mentions last folder name
+                }
+
+                return {
+                    text: p.text || '',
+                    score: score + boost,
+                    topic: p.topicHint || 'unknown',
+                    file: p.originalFileName || 'unknown',
+                    fullPath: p.relativePath || 'unknown',
+                };
+            })
+            .filter(c => c.text && c.score > 0.45)  // lowered threshold, only filter empty text
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 8)  // allow more context
+            .map(c => {
+                const header = c.topic !== 'unknown' ? `[${c.topic}] ${c.file}` : c.file;
+                return `From ${header}:\n${c.text}\n(score: ${c.score.toFixed(3)})`;
+            });
+
+        // Log EVERYTHING being sent to LLM
+        console.log(`[RAG Context] Retrieved ${contexts.length} chunks (top scores shown)`);
+        contexts.forEach((ctx, idx) => {
+            console.log(`Chunk ${idx + 1}:`);
+            console.log(ctx.slice(0, 300) + (ctx.length > 300 ? '...' : '')); // truncate long chunks
+            console.log('---');
+        });
 
         // Step 4: Build prompt with context + history
         const systemPrompt = `

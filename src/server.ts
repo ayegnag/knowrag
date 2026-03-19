@@ -15,6 +15,10 @@ import { ingestFileHandler, ingestFolderHandler, ingestRouter } from './modules/
 const app: Express = express();
 const port = env.PORT;
 
+// One-time collection init (safe to run on startup)
+await vectorDB.ensureCollection();
+console.log('[Startup] Qdrant collection ready');
+
 // ────────────────────────────────────────────────
 // Middleware
 // ────────────────────────────────────────────────

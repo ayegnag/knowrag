@@ -35,42 +35,82 @@ export class QdrantService {
         }
     }
 
+    // async upsert(vectors: Array<{
+    //     id: string | number;
+    //     vector: number[];                          // dense
+    //     sparse_vector?: { bm25: Record<number, number> };  // sparse
+    //     payload?: Record<string, any>;
+    // }>) {
+    //     const client = getQdrantClient();
+
+    //     const points = vectors.map(v => {
+    //         const point: any = {
+    //             id: String(v.id),
+    //             vector: v.vector,  // dense vector goes here (top-level key)
+    //             payload: v.payload || {},
+    //         };
+
+    //         // Add sparse if present
+    //         if (v.sparse_vector?.bm25) {
+    //             point.sparse_vector = {
+    //                 bm25: {
+    //                     indices: Object.keys(v.sparse_vector.bm25).map(Number),
+    //                     values: Object.values(v.sparse_vector.bm25),
+    //                 },
+    //             };
+    //         }
+
+    //         return point;
+    //     });
+
+    //     console.log(`[Qdrant Upsert] Sending ${points.length} points`);
+
+    //     await client.upsert(this.collectionName, {
+    //         points,
+    //     });
+
+    //     console.log('[Qdrant Upsert] Success');
+    //     return { upsertedCount: points.length };
+    // }
     async upsert(vectors: Array<{
         id: string | number;
-        vector: number[];                          // dense
-        sparse_vector?: { bm25: Record<number, number> };  // sparse
+        vector: number[];
+        sparse_vector?: { bm25: Record<number, number> };
         payload?: Record<string, any>;
     }>) {
         const client = getQdrantClient();
 
-        const points = vectors.map(v => {
-            const point: any = {
-                id: String(v.id),
-                vector: v.vector,  // dense vector goes here (top-level key)
-                payload: v.payload || {},
-            };
-
-            // Add sparse if present
-            if (v.sparse_vector?.bm25) {
-                point.sparse_vector = {
-                    bm25: {
-                        indices: Object.keys(v.sparse_vector.bm25).map(Number),
-                        values: Object.values(v.sparse_vector.bm25),
-                    },
-                };
-            }
-
-            return point;
-        });
+        const points = vectors.map(v => ({
+            id: String(v.id),  // ensure plain string
+            vector: v.vector,
+            sparse_vector: v.sparse_vector ? {
+                bm25: {
+                    indices: Object.keys(v.sparse_vector.bm25).map(Number),
+                    values: Object.values(v.sparse_vector.bm25),
+                }
+            } : undefined,
+            payload: v.payload || {},
+        }));
 
         console.log(`[Qdrant Upsert] Sending ${points.length} points`);
+        console.log(`[Qdrant Upsert] First point ID: ${points[0]?.id}`);
+        console.log(`[Qdrant Upsert] First vector length: ${points[0]?.vector?.length}`);
+        if (points[0]?.sparse_vector) {
+            console.log(`[Qdrant Upsert] Sparse bm25 indices count: ${points[0].sparse_vector.bm25.indices.length}`);
+        }
 
-        await client.upsert(this.collectionName, {
-            points,
-        });
-
-        console.log('[Qdrant Upsert] Success');
-        return { upsertedCount: points.length };
+        try {
+            await client.upsert(this.collectionName, { points });
+            console.log('[Qdrant Upsert] Success');
+            return { upsertedCount: points.length };
+        } catch (err: any) {
+            console.error('[Qdrant Upsert] FAILED');
+            console.error('Error message:', err.message);
+            console.error('Status:', err.status);
+            console.error('Response body:', err.data ? JSON.stringify(err.data, null, 2) : 'No body');
+            console.error('Stack:', err.stack);
+            throw err;  // re-throw so outer catch sees it
+        }
     }
 
     async query({

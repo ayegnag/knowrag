@@ -2,26 +2,26 @@
  * Simple recursive character chunker with overlap (Markdown-aware)
  * Good default for Obsidian notes + other docs
  */
-export function chunkText(text: string, chunkSize = 800, overlap = 100): string[] {
+// src/modules/ingest/chunker.ts
+export function chunkText(text: string, maxChunkSize = 650, overlap = 150): string[] {
   const chunks: string[] = [];
-  let start = 0;
+  let current = '';
 
-  while (start < text.length) {
-    let end = start + chunkSize;
+  // Split on headings first (Obsidian-friendly)
+  const sections = text.split(/(?=^#{1,6}\s)/gm);
 
-    // Try to break on paragraph or heading if possible
-    if (end < text.length) {
-      const slice = text.slice(start, end);
-      const lastNewline = slice.lastIndexOf('\n\n');
-      const lastHeading = slice.lastIndexOf('\n#');
-      if (lastNewline > chunkSize * 0.6) end = start + lastNewline;
-      else if (lastHeading > chunkSize * 0.6) end = start + lastHeading;
+  for (const section of sections) {
+    const paragraphs = section.split(/\n\s*\n/);
+    for (const para of paragraphs) {
+      if ((current.length + para.length) > maxChunkSize && current) {
+        chunks.push(current.trim());
+        current = current.slice(-overlap); // overlap last part
+      }
+      current += para + '\n\n';
     }
-
-    chunks.push(text.slice(start, end).trim());
-    start = end - overlap;
-    if (start < 0) start = 0;
   }
 
-  return chunks.filter(c => c.length > 20);
+  if (current.trim()) chunks.push(current.trim());
+
+  return chunks.filter(c => c.length > 40);
 }
