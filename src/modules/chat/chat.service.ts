@@ -5,9 +5,31 @@ import { llm } from '../../config/llm-providers.js';
 import env from '../../config/env.js';
 import { generateSparseVector } from '../ingest/bm25.ts';
 
+const chatStore = new Map<string, Array<{ role: string; content: string; timestamp?: number }>>();
+
 export const chatService = {
-    async processChat(userMessage: string, history: Array<{ role: string; content: string }>, stream = false) {
-        // Step 1: Security check
+
+    getHistory(chatId: string) {
+        return chatStore.get(chatId) || [];
+    },
+
+    deleteChat(chatId: string) {
+        chatStore.delete(chatId);
+        return { success: true };
+    },
+
+    deleteMessage(chatId: string, messageIndex: number) {
+        const history = chatStore.get(chatId);
+        if (history && messageIndex >= 0 && messageIndex < history.length) {
+            history.splice(messageIndex, 1);
+            chatStore.set(chatId, history);
+            return { success: true };
+        }
+        return { success: false };
+    },
+
+    async processChat(userMessage: string, history: Array<{ role: string; content: string; timestamp?: number }>, chatId: string, stream = false) {
+        // Step 0: Security check
         const security = await runSecurityPipeline(userMessage);
         if (!security.isAllowed) {
             return {
@@ -18,6 +40,14 @@ export const chatService = {
                 confidence: security.confidence,
             };
         }
+
+        // Step 1: Pull History
+        const effectiveChatId = chatId || `chat-${Date.now()}`;
+
+        // Load existing history if chatId provided
+        let fullHistory = chatStore.get(effectiveChatId) || [];
+        if (history && history.length > 0) fullHistory = [...fullHistory, ...history];
+
 
         // Step 2: Embed the user query
         const queryEmbedding = await llm.generateEmbedding(userMessage);
@@ -220,17 +250,27 @@ Answer concisely and professionally.
                     return;
                 }
 
+                let fullReply = '';
                 generationStream.data.on('data', (chunk: Buffer) => {
                     const lines = chunk.toString().split('\n').filter(Boolean);
                     for (const line of lines) {
                         try {
                             const parsed = JSON.parse(line);
                             if (parsed.message?.content) {
-                                // ✅ Write raw text — no wrapping, no JSON
+                                const token = parsed.message.content;
+                                fullReply += token;
                                 res.write(parsed.message.content);
                                 console.log('[ProcessChat - Stream] delta:', parsed.message.content);
                             }
                             if (parsed.done) {
+                                fullHistory.push({
+                                    role: 'assistant',
+                                    content: fullReply,
+                                    timestamp: Date.now(),
+                                });
+                                chatStore.set(chatId, fullHistory);
+
+                                console.log(`[ChatStore] Saved streaming chat ${chatId} | ${fullHistory.length} messages`);
                                 res.end();
                             }
                         } catch (err: any) {

@@ -1,26 +1,46 @@
 import { useEffect, useRef, useState } from 'react';
 import { useChat } from '@ai-sdk/react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { DefaultChatTransport, TextStreamChatTransport } from 'ai';
+import { TextStreamChatTransport } from 'ai';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Loader2, Send, Moon, Sun } from 'lucide-react';
+import { Loader2, Send, Moon, Sun, Trash2 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { Textarea } from './components/ui/textarea';
 
-export default function App() {
-  // ✅ Fix 2 & 3: manage input manually since useChat v5 no longer returns it
+const placeholderTopics = [
+  "General Onboarding",
+  "Company Policies",
+  "My Brag Docs",
+  "Healthcare Projects",
+  "New Chat"
+];
+
+// ─────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────
+interface ChatUIProps {
+  chatId: string;
+  darkMode: boolean;
+  setDarkMode: (val: boolean) => void;
+  initialMessages: any[];
+}
+
+// ─────────────────────────────────────────────
+// ChatUI — only mounts after history is ready
+// ─────────────────────────────────────────────
+function ChatUI({ chatId, darkMode, setDarkMode, initialMessages }: ChatUIProps) {
   const [input, setInput] = useState('');
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const [darkMode, setDarkMode] = useState<boolean>(
-    window.matchMedia('(prefers-color-scheme: dark)').matches
-  );
-
-  const { messages, sendMessage, status, stop, error } = useChat({
+  const { messages, sendMessage, status, error } = useChat({
+    id: chatId,
     transport: new TextStreamChatTransport({
       api: 'http://localhost:3000/api/chat',
     }),
+    messages: initialMessages, // ✅ stable — history fetch is complete before this mounts
     onError: (err) => {
       console.error('SendMessage error:', err);
       toast.error('Chat error', {
@@ -30,13 +50,13 @@ export default function App() {
   });
 
   const isLoading = status === 'submitted';
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
+  // Surface connection errors as toasts
   useEffect(() => {
     if (error) {
       console.error('Connection error:', error);
@@ -46,34 +66,43 @@ export default function App() {
     }
   }, [error]);
 
-  useEffect(() => {
-    if (darkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
+  // Auto-grow textarea
+  const handleInput = () => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 160)}px`;
     }
-  }, [darkMode]);
+  };
 
-  // ✅ Fix 1: form onSubmit uses SyntheticEvent; sendMessage called manually with text
   const handleSubmit = (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!input.trim() || isLoading) return;
     sendMessage({ text: input });
     setInput('');
+    handleInput();
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (input.trim() && !isLoading) {
         sendMessage({ text: input });
         setInput('');
+        handleInput();
       }
     }
   };
 
+  const handleClearChat = () => {
+    fetch(`/api/chat/${chatId}`, { method: 'DELETE' });
+    toast.success('Chat deleted');
+    window.location.reload();
+  };
+
+  // console.log('Rendering ChatUI with messages:', messages);
+
   return (
-    <div className={cn("min-h-screen flex flex-col", darkMode ? "dark bg-gray-950" : "bg-gray-50")}>
+    <div className={cn('min-h-screen flex flex-col', darkMode ? 'dark bg-gray-950' : 'bg-gray-50')}>
       {/* Header */}
       <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
@@ -81,6 +110,9 @@ export default function App() {
             Knowrag Chat
           </h4>
           <div className="flex items-center gap-3">
+            <Button variant="destructive" size="sm" onClick={handleClearChat}>
+              <Trash2 className="h-4 w-4 mr-2" /> Clear Chat
+            </Button>
             <Button
               variant="ghost"
               size="icon"
@@ -93,7 +125,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Chat Area */}
+      {/* Messages */}
       <main className="flex-1 flex flex-col overflow-hidden bg-background">
         <ScrollArea className="flex-1 px-4 py-6">
           <div className="max-w-5xl mx-auto space-y-6 pb-24">
@@ -116,7 +148,7 @@ export default function App() {
               >
                 {m.role !== 'user' && (
                   <Avatar className="h-9 w-9 mt-1">
-                    <AvatarFallback className="bg-primary/10 text-primary font-medium text-left">
+                    <AvatarFallback className="bg-primary/10 text-primary font-medium">
                       AI
                     </AvatarFallback>
                   </Avatar>
@@ -130,26 +162,21 @@ export default function App() {
                       : 'bg-muted rounded-tl-none'
                   )}
                 >
-                  <div className="whitespace-pre-wrap text-sm leading-relaxed break-words w-fit">
-                    {m.parts.map((part, index) => {
-                      if (part.type === 'text') {
-                        return <span key={index}>{part.text}</span>;
-                      }
-                    })}
+                  <div className="whitespace-pre-wrap text-sm leading-relaxed break-words w-fit text-left">
+                    {m.parts && m.parts.length > 0
+                      ? m.parts.map((part, index) => {
+                        if (part.type === 'text') {
+                          return <span key={index}>{part.text}</span>;
+                        }
+                      })
+                      : (m as any).content
+                    }
                   </div>
-
-                  {/* ✅ Fix 4: use m.createdAt which is the correct field on UIMessage */}
-                  {/* <div className="text-xs opacity-70 mt-1.5 text-right">
-                    {new Date(m.createdAt ?? Date.now()).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </div> */}
                 </div>
 
                 {m.role === 'user' && (
                   <Avatar className="h-9 w-9 mt-1">
-                    <AvatarFallback className="bg-primary text-primary-foreground font-medium text-left">
+                    <AvatarFallback className="bg-primary text-primary-foreground font-medium">
                       ME
                     </AvatarFallback>
                   </Avatar>
@@ -179,19 +206,20 @@ export default function App() {
             onSubmit={handleSubmit}
             className="max-w-5xl mx-auto p-4 flex gap-3 items-end"
           >
-            <Input
-              ref={inputRef}
+            <Textarea
+              ref={textareaRef}
               value={input}
-              onChange={(e) => setInput(e.target.value)}  // ✅ Fix 3: inline handler
+              onChange={(e: any) => { setInput(e.target.value); handleInput(); }}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your notes, or anything..."
+              placeholder="Ask anything... (Shift+Enter for new line)"
+              rows={1}
               disabled={isLoading}
-              className="min-h-[56px] resize-none rounded-xl px-5"
+              className="resize-none min-h-12.5 max-h-40 rounded-xl px-5 py-4"
             />
             <Button
               type="submit"
               size="icon"
-              className="h-[56px] w-[56px] rounded-xl"
+              className="h-13.5 w-13.5 rounded-xl"
               disabled={isLoading || !input.trim()}
             >
               {isLoading ? (
@@ -203,8 +231,82 @@ export default function App() {
           </form>
         </div>
       </main>
-
-      <Toaster position="top-right" />
     </div>
   );
+}
+
+// ─────────────────────────────────────────────
+// App — parent, owns history fetch & dark mode
+// ─────────────────────────────────────────────
+export default function App() {
+  const [chatId] = useState(() => {
+    const saved = localStorage.getItem('currentChatId');
+    return saved || `chat-${Date.now()}`;
+  });
+
+  const [chatTopic, setChatTopic] = useState(() => {
+    const saved = localStorage.getItem('currentChatTopic');
+    return saved || placeholderTopics[0];
+  });
+
+  const [darkMode, setDarkMode] = useState<boolean>(
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+
+  const [initialMessages, setInitialMessages] = useState<any[]>([]);
+  const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
+
+  // Dark mode class on <html>
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [darkMode]);
+
+  // Fetch history — ChatUI only mounts once this resolves
+  useEffect(() => {
+    localStorage.setItem('currentChatId', chatId);
+    localStorage.setItem('currentChatTopic', chatTopic);
+
+    fetch(`/api/chat/history/${chatId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.messages) {
+          setInitialMessages(data.messages);
+        }
+      })
+      .catch(err => {
+        console.warn('No chat history found or fetch failed:', err);
+        // Non-fatal — new chat starts with empty messages
+      })
+      .finally(() => setIsHistoryLoaded(true)); // ✅ always unblocks, even on error
+  }, [chatId, chatTopic]);
+
+  // Show spinner while history is loading
+  if (!isHistoryLoaded) {
+    return (
+      <div className={cn(
+        'min-h-screen flex flex-col items-center justify-center gap-3',
+        darkMode ? 'dark bg-gray-950 text-white' : 'bg-gray-50 text-gray-600'
+      )}>
+        <Loader2 className="h-7 w-7 animate-spin" />
+        <p className="text-sm">Loading chat history...</p>
+        <Toaster position="top-right" />
+      </div>
+    );
+  }
+
+  // ✅ ChatUI mounts here — initialMessages is finalized, no race condition
+  if (isHistoryLoaded) {
+    // console.log('Chat history loaded, rendering ChatUI with messages:', initialMessages);
+    return (
+      <>
+        <ChatUI
+          chatId={chatId}
+          darkMode={darkMode}
+          setDarkMode={setDarkMode}
+          initialMessages={initialMessages}
+        />
+        <Toaster position="top-right" />
+      </>
+    );
+  }
 }
