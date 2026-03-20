@@ -23,13 +23,34 @@ console.log('[Startup] Qdrant collection ready');
 // Middleware
 // ────────────────────────────────────────────────
 
+// app.use(cors({
+//   origin: env.NODE_ENV === 'production'
+//     ? ['https://your-frontend-domain.com'] // ← update later
+//     : ['http://localhost:3000', 'http://127.0.0.1:3000'],
+//   credentials: true,
+// }));
 app.use(cors({
-  origin: env.NODE_ENV === 'production'
-    ? ['https://your-frontend-domain.com'] // ← update later
-    : ['http://localhost:3000', 'http://127.0.0.1:3000'],
-  credentials: true,
+  origin: [
+    'http://localhost:3000/', 'http://127.0.0.1:3000/',
+    'http://localhost:5173',          // Vite default port
+    'http://127.0.0.1:5173',          // sometimes needed
+    // Add production origins later, e.g. 'https://your-app.vercel.app'
+  ],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'Accept',
+    'User-Agent',                // ← add this (browser sends it)
+    'Origin',
+    'Referer',
+    'Cache-Control',
+    'X-Requested-With',
+  ],
+  credentials: false,                  // if you ever add cookies/auth
 }));
 
+app.options('*', cors());
 app.use(express.json({ limit: '10mb' })); // increase if large doc uploads expected
 app.use(express.urlencoded({ extended: true }));
 

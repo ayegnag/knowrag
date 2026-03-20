@@ -68,12 +68,12 @@ export const chatService = {
             .slice(0, 12);  // take up to 12 — plenty for most prompts
 
         // Log all kept chunks
-        console.log(`[RAG Context] Kept ${contexts.length} chunks after sorting (no hard score filter)`);
-        contexts.forEach((c, i) => {
-            console.log(`Chunk ${i + 1} (${c.score.toFixed(3)}): ${c.topic} / ${c.file}`);
-            console.log(c.text.slice(0, 150) + (c.text.length > 150 ? '...' : ''));
-            console.log('---');
-        });
+        // console.log(`[RAG Context] Kept ${contexts.length} chunks after sorting (no hard score filter)`);
+        // contexts.forEach((c, i) => {
+        //     console.log(`Chunk ${i + 1} (${c.score.toFixed(3)}): ${c.topic} / ${c.file}`);
+        //     console.log(c.text.slice(0, 150) + (c.text.length > 150 ? '...' : ''));
+        //     console.log('---');
+        // });
 
         // Step 4: Build prompt with context + history
         const systemPrompt = `
@@ -88,7 +88,7 @@ Answer concisely and professionally.
             ? `Relevant context from your Obsidian notes (sorted by relevance, with folder paths):\n\n` +
             contexts.map(c => `From ${c.topic} / ${c.file} (score: ${c.score.toFixed(3)}):\n${c.text}`).join('\n\n---\n\n')
             : 'No sufficiently relevant notes found.';
-        console.log(`[RAG Prompt] Sending ${contexts.length} chunks to LLM (total context length: ${contextBlock.length})`);
+        // console.log(`[RAG Prompt] Sending ${contexts.length} chunks to LLM (total context length: ${contextBlock.length})`);
 
         const messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }> = [
             { role: 'system', content: systemPrompt + '\n\n' + contextBlock },
@@ -101,67 +101,150 @@ Answer concisely and professionally.
 
         // Step 5: Generate response
 
+        // if (stream) {
+        //     console.log('[ProcessChat] Generating response...');
+        //     // Return a function that will be called by controller to stream
+        //     try {
+        //         return async (res: Response) => {
+        //             console.log('[ProcessChat] Setting headers...');
+        //             res.setHeader('Content-Type', 'text/event-stream');
+        //             res.setHeader('Cache-Control', 'no-cache');
+        //             res.setHeader('Connection', 'keep-alive');
+
+        //             let generationStream;
+        //             try {
+        //                 generationStream = await llm.generateChatCompletion(messages, {
+        //                     temperature: 0.7,
+        //                     max_tokens: 1024,
+        //                     stream: true,
+        //                 });
+        //             } catch (err: any) {
+        //                 console.error('[ProcessChat] Stream generation error:', err);
+        //                 res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+        //                 res.end();
+        //                 return;
+        //             }
+
+        //             // Ollama stream handling (adjust based on your updated provider)
+        //             let fullReply = '';
+
+        //             console.log('[ProcessChat] generationStream:', generationStream);
+        //             generationStream.data.on('data', (chunk: Buffer) => {
+        //                 const lines = chunk.toString().split('\n').filter(Boolean);
+        //                 for (const line of lines) {
+        //                     try {
+        //                         const parsed = JSON.parse(line);
+        //                         if (parsed.message?.content) {
+        //                             fullReply += parsed.message.content;
+        //                             res.write(`data: ${JSON.stringify({ content: parsed.message.content })}\n\n`);
+        //                             console.log('[ProcessChat - Stream] content:', parsed.message.content);
+        //                         }
+        //                         if (parsed.done) {
+        //                             res.write(`data: ${JSON.stringify({ done: true, fullReply })}\n\n`);
+        //                             res.end();
+        //                         }
+        //                     } catch (err: any) {
+        //                         console.warn('[ProcessChat - Stream] error:', err);
+        //                     }
+        //                 }
+        //             });
+
+        //             generationStream.data.on('error', (err: any) => {
+        //                 res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+        //                 res.end();
+        //             });
+        //         };
+        //     } catch (err: any) {
+        //         console.error('[ProcessChat] Stream generation error:', err);
+        //         // return {
+        //         //     success: false,
+        //         //     blocked: false,
+        //         //     error: err.message || 'Streaming generation failed',
+        //         // };
+        //     }
+
+        //     console.warn('[ProcessChat] Stream generation setup failed, falling back to non-streaming response');
+        //     // For non-streaming, just return the full response
+        //     const generation = await llm.generateChatCompletion(messages, {
+        //         temperature: 0.7,
+        //         max_tokens: 1024,
+        //         stream: false, // <-- For simplicity, we do non-streaming here. Can be enhanced later.
+        //     });
+
+        //     const assistantReply = generation.choices[0].message.content.trim();
+
+        //     // Optional: return full trace for debugging
+        //     // return {
+        //     //     success: true,
+        //     //     blocked: false,
+        //     //     reply: assistantReply,
+        //     //     retrievedChunks: contexts.length,
+        //     //     retrievalScores: retrieval.results.map((r: { score: any; }) => r.score),
+        //     //     usedContext: contexts,
+        //     //     debug: { security, messagesLength: messages.length },
+        //     // };
+
+        //     return {
+        //         messages: {
+        //             id: `msg-assistant-${Date.now()}`,
+        //             role: "assistant",
+        //             content: assistantReply,
+        //             parts: [{ type: 'text', text: assistantReply }],
+        //             // You can keep these for your own debugging (SDK will ignore them)
+        //             debug: {
+        //                 retrievedChunks: contexts.length,
+        //                 retrievalScores: retrieval.results.map((r: any) => r.score || 0),
+        //             },
+        //         }
+        //     };
+        // }
+
         if (stream) {
-            // Return a function that will be called by controller to stream
             return async (res: Response) => {
-                res.setHeader('Content-Type', 'text/event-stream');
+                // ✅ Text stream protocol: plain text, no SSE envelope needed
+                res.setHeader('Content-Type', 'text/plain; charset=utf-8');
                 res.setHeader('Cache-Control', 'no-cache');
                 res.setHeader('Connection', 'keep-alive');
+                res.setHeader('X-Accel-Buffering', 'no'); // prevents nginx buffering
 
-                const generationStream = await llm.generateChatCompletion(messages, {
-                    temperature: 0.7,
-                    max_tokens: 1024,
-                    stream: true,
-                });
+                let generationStream;
+                try {
+                    generationStream = await llm.generateChatCompletion(messages, {
+                        temperature: 0.7,
+                        max_tokens: 1024,
+                        stream: true,
+                    });
+                } catch (err: any) {
+                    console.error('[ProcessChat] Stream generation error:', err);
+                    res.status(500).end(err.message);
+                    return;
+                }
 
-                // Ollama stream handling (adjust based on your updated provider)
-                let fullReply = '';
-
-                // console.log('[ProcessChat] generationStream:', generationStream);
                 generationStream.data.on('data', (chunk: Buffer) => {
                     const lines = chunk.toString().split('\n').filter(Boolean);
                     for (const line of lines) {
                         try {
                             const parsed = JSON.parse(line);
                             if (parsed.message?.content) {
-                                fullReply += parsed.message.content;
-                                res.write(`data: ${JSON.stringify({ content: parsed.message.content })}\n\n`);
+                                // ✅ Write raw text — no wrapping, no JSON
+                                res.write(parsed.message.content);
+                                console.log('[ProcessChat - Stream] delta:', parsed.message.content);
                             }
                             if (parsed.done) {
-                                res.write(`data: ${JSON.stringify({ done: true, fullReply })}\n\n`);
                                 res.end();
                             }
                         } catch (err: any) {
-                            console.warn('[ProcessChat - Stream] error:', err);
+                            console.warn('[ProcessChat - Stream] parse error:', err);
                         }
                     }
                 });
 
                 generationStream.data.on('error', (err: any) => {
-                    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+                    console.error('[ProcessChat] stream error:', err);
                     res.end();
                 });
             };
         }
 
-        // For non-streaming, just return the full response
-        const generation = await llm.generateChatCompletion(messages, {
-            temperature: 0.7,
-            max_tokens: 1024,
-            stream: false, // <-- For simplicity, we do non-streaming here. Can be enhanced later.
-        });
-
-        const assistantReply = generation.choices[0].message.content.trim();
-
-        // Optional: return full trace for debugging
-        return {
-            success: true,
-            blocked: false,
-            reply: assistantReply,
-            retrievedChunks: contexts.length,
-            retrievalScores: retrieval.results.map((r: { score: any; }) => r.score),
-            usedContext: contexts,
-            debug: { security, messagesLength: messages.length },
-        };
-    },
-};
+    }
+}
