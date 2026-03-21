@@ -8,7 +8,7 @@ export async function chatHandler(req: Request, res: Response) {
   console.log('[Chat Handler] Received payload:', JSON.stringify(body, null, 2));
 
   let userMessage: string | undefined;
-  let history: Array<{ role: string; content: string; timestamp?: number }> = [];
+  let history: Array<{ role: string; content: string; timestamp: number }> = [];
   let chatId: string | undefined;
 
   // AI SDK format
@@ -75,7 +75,8 @@ export async function listChatsHandler(req: Request, res: Response) {
 export async function getHistoryHandler(req: Request, res: Response) {
   const { chatId } = req.params;
   const history = chatService.getHistory(chatId);
-  res.json({ chatId, messages: history });
+  const meta = chatService.getChatMeta(chatId);
+  res.json({ chatId, messages: history, meta });
 }
 
 export async function deleteChatHandler(req: Request, res: Response) {

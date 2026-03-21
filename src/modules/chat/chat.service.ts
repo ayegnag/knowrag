@@ -2,15 +2,11 @@ import { Response } from 'express';
 import { runSecurityPipeline } from '../../middleware/security/securityPipeline.js';
 import { vectorDB } from '../../services/vector-db/qdrant/qdrant.service.ts';
 import { llm } from '../../config/llm-providers.js';
-import env from '../../config/env.js';
+// import env from '../../config/env.js';
 import { generateSparseVector } from '../ingest/bm25.ts';
 
 const chatStore = new Map<string, Array<{ role: string; content: string; timestamp?: number }>>();
-const chats = new Map<string, {
-    id: string;
-    topic: string;
-    messages: Array<{ role: string; content: string; timestamp: number }>;
-}>();
+const chatMeta = new Map<string, { topic: string; createdAt: number; lastUpdated: number }>();
 
 export const chatService = {
 
@@ -18,13 +14,21 @@ export const chatService = {
         return chatStore.get(chatId) || [];
     },
 
+    getChatMeta(chatId: string) {
+        return chatMeta.get(chatId) || null;
+    },
+
     listChats() {
-        return Array.from(chats.values())
-            .sort((a, b) => (b.messages[b.messages.length - 1]?.timestamp || 0) - (a.messages[a.messages.length - 1]?.timestamp || 0));
+        return Array.from(chatMeta.entries()).map(([id, meta]) => ({
+            chatId: id,
+            topic: meta.topic,
+            lastUpdated: meta.lastUpdated,
+        })).sort((a, b) => b.lastUpdated - a.lastUpdated);
     },
 
     deleteChat(chatId: string) {
         chatStore.delete(chatId);
+        chatMeta.delete(chatId);
         return { success: true };
     },
 
@@ -38,7 +42,7 @@ export const chatService = {
         return { success: false };
     },
 
-    async processChat(userMessage: string, history: Array<{ role: string; content: string; timestamp?: number }>, chatId: string, stream = false) {
+    async processChat(userMessage: string, history: Array<{ role: string; content: string; timestamp: number }>, chatId: string, stream = false) {
         console.log(`[ProcessChat] user-message`, userMessage);
 
         // Generate Chat Topic if new chat
@@ -94,7 +98,14 @@ Respond with ONLY the topic text. No quotes, no explanation, no extra words.
             } catch (e) {
                 console.warn('[Chat] Topic generation failed, using default', e);
             }
+            // Save metadata for new chat
+          chatMeta.set(chatId, {
+            topic: chatTopic,
+            createdAt: Date.now(),
+            lastUpdated: Date.now(),
+          });
         }
+
 
         // ---
 
@@ -363,6 +374,12 @@ Answer concisely and professionally.
                     console.error('[ProcessChat] stream error:', err);
                     res.end();
                 });
+
+
+                // Update lastUpdated
+                const meta = chatMeta.get(chatId)!;
+                meta.lastUpdated = Date.now();
+                chatMeta.set(chatId, meta);
             };
         }
 

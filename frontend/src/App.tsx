@@ -8,14 +8,15 @@ import { Loader2, Send, Moon, Sun, Trash2 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Textarea } from './components/ui/textarea';
-
-const placeholderTopics = [
-  "General Onboarding",
-  "Company Policies",
-  "My Brag Docs",
-  "Healthcare Projects",
-  "New Chat"
-];
+// import { Separator } from 'radix-ui';
+// import {
+//   Item,
+//   ItemActions,
+//   ItemContent,
+//   ItemDescription,
+//   ItemMedia,
+//   ItemTitle,
+// } from "@/components/ui/item"
 
 // ─────────────────────────────────────────────
 // Types
@@ -31,6 +32,7 @@ interface SidebarProps {
   setDarkMode: (val: boolean) => void;
   allChats: any[];
   currentChatId: string;
+  chatTopic: string;
   switchToChat: (id: string) => void;
   createNewChat: () => void;
   handleClearChat: () => void;
@@ -119,9 +121,9 @@ function ChatUI({ chatId, darkMode, initialMessages }: ChatUIProps) {
               </div>
             )}
 
-            {messages.map((m) => (
+            {messages.map((m, index) => (
               <div
-                key={m.id}
+                key={m.id || index}
                 className={cn(
                   'flex gap-3 max-w-3xl mx-auto animate-in fade-in-0 duration-200',
                   m.role === 'user' ? 'justify-end' : 'justify-start'
@@ -219,17 +221,17 @@ function ChatUI({ chatId, darkMode, initialMessages }: ChatUIProps) {
 // ─────────────────────────────────────────────
 // Sidebar — lists all chats, allows switching & creating new
 // ─────────────────────────────────────────────
-function Sidebar({ darkMode, setDarkMode, allChats, currentChatId, switchToChat, createNewChat, handleClearChat }: SidebarProps) {
+function Sidebar({ darkMode, setDarkMode, allChats, currentChatId, chatTopic, switchToChat, createNewChat, handleClearChat }: SidebarProps) {
   return (
     <aside className="min-h-screen w-72 border-r bg-card flex flex-col">
       {/* Header */}
       <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className='flex flex-row'>
-          <img src="/knowrag-icon.svg" alt="Knowrag Logo" className="h-6 w-6 inline-block mr-2 mt-1" />
-          <h4 className="text-xl md:text-2xl mt-0 mb-0 font-bold tracking-tight">
-            Knowrag
-          </h4>
+            <img src="/knowrag-icon.svg" alt="Knowrag Logo" className="h-6 w-6 inline-block mr-2 mt-1" />
+            <h4 className="text-xl md:text-2xl mt-0 mb-0 font-bold tracking-tight">
+              Knowrag
+            </h4>
           </div>
           <div className="flex items-center gap-3">
             <Button
@@ -243,6 +245,13 @@ function Sidebar({ darkMode, setDarkMode, allChats, currentChatId, switchToChat,
           </div>
         </div>
       </header>
+      
+      {/* <Item>
+        <ItemContent>
+          <ItemTitle>{chatTopic}</ItemTitle>
+        </ItemContent>
+      </Item> */}
+
       <Button variant="destructive" size="sm" onClick={handleClearChat}>
         <Trash2 className="h-4 w-4 mr-2" /> Clear Chat
       </Button>
@@ -250,9 +259,9 @@ function Sidebar({ darkMode, setDarkMode, allChats, currentChatId, switchToChat,
       <ScrollArea className="flex-1">
         {allChats.map((c: any) => (
           <button
-            key={c.id}
-            onClick={() => switchToChat(c.id)}
-            className={`w-full text-left px-4 py-3 hover:bg-accent ${currentChatId === c.id ? 'bg-accent' : ''}`}>
+            key={c.chatId}
+            onClick={() => switchToChat(c.chatId)}
+            className={`w-full text-left px-4 py-3 hover:bg-accent ${currentChatId === c.chatId ? 'bg-accent' : ''}`}>
             <div className="font-medium truncate">{c.topic}</div>
             <div className="text-xs text-muted-foreground truncate">{c.messages?.[c.messages.length - 1]?.content?.slice(0, 40)}...</div>
           </button>
@@ -272,7 +281,7 @@ export default function App() {
 
   const [chatTopic, setChatTopic] = useState(() => {
     const saved = localStorage.getItem('currentChatTopic');
-    return saved || placeholderTopics[0];
+    return saved || '...';
   });
 
   const [darkMode, setDarkMode] = useState<boolean>(
@@ -289,21 +298,36 @@ export default function App() {
     fetch('/api/chats').then(r => r.json()).then(setAllChats);
   }, []);
 
-  const switchToChat = (id: string) => {
-    setCurrentChatId(id);
-    fetch(`/api/chat/${id}`)
-      .then(r => r.json())
-      .then(chat => {
-        setInitialMessages(chat.messages || []);
-        setChatTopic(chat.topic || "Untitled");
-      });
+  const switchToChat = (chatId: string) => {
+    setCurrentChatId(chatId);
+    fetch(`/api/chat/${chatId}`)
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.messages) {
+          setInitialMessages(data.messages);
+          setChatTopic(data.meta.topic || "...");
+        }
+      })
+      .catch(err => {
+        console.warn('No chat history found or fetch failed:', err);
+        // Non-fatal — new chat starts with empty messages
+      })
+      .finally(() => setIsHistoryLoaded(true)); // always unblocks, even on error
+
+    localStorage.setItem('currentChatId', chatId);
+    localStorage.setItem('currentChatTopic', chatTopic);
+
   };
 
   const createNewChat = () => {
     const newId = `chat-${Date.now()}`;
     setCurrentChatId(newId);
+    localStorage.setItem('currentChatId', newId);
+    console.log('New Id', newId);
     setInitialMessages([]);
     setChatTopic("New Conversation");
+
+    window.location.reload();
   };
 
   const handleClearChat = () => {
@@ -319,21 +343,7 @@ export default function App() {
 
   // Fetch history — ChatUI only mounts once this resolves
   useEffect(() => {
-    localStorage.setItem('currentChatId', chatId);
-    localStorage.setItem('currentChatTopic', chatTopic);
-
-    fetch(`/api/chat/history/${chatId}`)
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.messages) {
-          setInitialMessages(data.messages);
-        }
-      })
-      .catch(err => {
-        console.warn('No chat history found or fetch failed:', err);
-        // Non-fatal — new chat starts with empty messages
-      })
-      .finally(() => setIsHistoryLoaded(true)); // ✅ always unblocks, even on error
+    switchToChat(chatId);
   }, [chatId, chatTopic]);
 
   // Show spinner while history is loading
@@ -360,6 +370,7 @@ export default function App() {
           setDarkMode={setDarkMode}
           allChats={allChats}
           currentChatId={currentChatId}
+          chatTopic={chatTopic}
           switchToChat={switchToChat}
           createNewChat={createNewChat}
           handleClearChat={handleClearChat}

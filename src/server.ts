@@ -142,7 +142,7 @@ app.get('/health/vector-db', async (req: Request, res: Response) => {
 
 app.post('/api/chat', chatHandler);
 app.get('/api/chats', listChatsHandler);
-app.get('/api/chat/history/:chatId', getHistoryHandler);
+app.get('/api/chat/:chatId', getHistoryHandler);
 app.delete('/api/chat/:chatId', deleteChatHandler);
 
 // ────────────────────────────────────────────────
