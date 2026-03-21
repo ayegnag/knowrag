@@ -23,14 +23,23 @@ const placeholderTopics = [
 interface ChatUIProps {
   chatId: string;
   darkMode: boolean;
-  setDarkMode: (val: boolean) => void;
   initialMessages: any[];
+}
+
+interface SidebarProps {
+  darkMode: boolean;
+  setDarkMode: (val: boolean) => void;
+  allChats: any[];
+  currentChatId: string;
+  switchToChat: (id: string) => void;
+  createNewChat: () => void;
+  handleClearChat: () => void;
 }
 
 // ─────────────────────────────────────────────
 // ChatUI — only mounts after history is ready
 // ─────────────────────────────────────────────
-function ChatUI({ chatId, darkMode, setDarkMode, initialMessages }: ChatUIProps) {
+function ChatUI({ chatId, darkMode, initialMessages }: ChatUIProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -93,38 +102,10 @@ function ChatUI({ chatId, darkMode, setDarkMode, initialMessages }: ChatUIProps)
     }
   };
 
-  const handleClearChat = () => {
-    fetch(`/api/chat/${chatId}`, { method: 'DELETE' });
-    toast.success('Chat deleted');
-    window.location.reload();
-  };
-
   // console.log('Rendering ChatUI with messages:', messages);
 
   return (
-    <div className={cn('min-h-screen flex flex-col', darkMode ? 'dark bg-gray-950' : 'bg-gray-50')}>
-      {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <h4 className="text-xl md:text-2xl mt-0 mb-0 font-bold tracking-tight">
-            Knowrag Chat
-          </h4>
-          <div className="flex items-center gap-3">
-            <Button variant="destructive" size="sm" onClick={handleClearChat}>
-              <Trash2 className="h-4 w-4 mr-2" /> Clear Chat
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setDarkMode(!darkMode)}
-              aria-label="Toggle dark mode"
-            >
-              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
-          </div>
-        </div>
-      </header>
-
+    <div className={cn('min-h-screen flex flex-col w-full', darkMode ? 'dark bg-gray-950' : 'bg-gray-50')}>
       {/* Messages */}
       <main className="flex-1 flex flex-col overflow-hidden bg-background">
         <ScrollArea className="flex-1 px-4 py-6">
@@ -236,6 +217,51 @@ function ChatUI({ chatId, darkMode, setDarkMode, initialMessages }: ChatUIProps)
 }
 
 // ─────────────────────────────────────────────
+// Sidebar — lists all chats, allows switching & creating new
+// ─────────────────────────────────────────────
+function Sidebar({ darkMode, setDarkMode, allChats, currentChatId, switchToChat, createNewChat, handleClearChat }: SidebarProps) {
+  return (
+    <aside className="min-h-screen w-72 border-r bg-card flex flex-col">
+      {/* Header */}
+      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
+        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div className='flex flex-row'>
+          <img src="/knowrag-icon.svg" alt="Knowrag Logo" className="h-6 w-6 inline-block mr-2 mt-1" />
+          <h4 className="text-xl md:text-2xl mt-0 mb-0 font-bold tracking-tight">
+            Knowrag
+          </h4>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setDarkMode(!darkMode)}
+              aria-label="Toggle dark mode"
+            >
+              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            </Button>
+          </div>
+        </div>
+      </header>
+      <Button variant="destructive" size="sm" onClick={handleClearChat}>
+        <Trash2 className="h-4 w-4 mr-2" /> Clear Chat
+      </Button>
+      <Button onClick={createNewChat} className="m-3">+ New Chat</Button>
+      <ScrollArea className="flex-1">
+        {allChats.map((c: any) => (
+          <button
+            key={c.id}
+            onClick={() => switchToChat(c.id)}
+            className={`w-full text-left px-4 py-3 hover:bg-accent ${currentChatId === c.id ? 'bg-accent' : ''}`}>
+            <div className="font-medium truncate">{c.topic}</div>
+            <div className="text-xs text-muted-foreground truncate">{c.messages?.[c.messages.length - 1]?.content?.slice(0, 40)}...</div>
+          </button>
+        ))}
+      </ScrollArea>
+    </aside>);
+}
+
+// ─────────────────────────────────────────────
 // App — parent, owns history fetch & dark mode
 // ─────────────────────────────────────────────
 export default function App() {
@@ -255,6 +281,36 @@ export default function App() {
 
   const [initialMessages, setInitialMessages] = useState<any[]>([]);
   const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
+  const [allChats, setAllChats] = useState<any[]>([]);
+  const [currentChatId, setCurrentChatId] = useState<string>("");
+
+  // Get list of all chats for sidebar
+  useEffect(() => {
+    fetch('/api/chats').then(r => r.json()).then(setAllChats);
+  }, []);
+
+  const switchToChat = (id: string) => {
+    setCurrentChatId(id);
+    fetch(`/api/chat/${id}`)
+      .then(r => r.json())
+      .then(chat => {
+        setInitialMessages(chat.messages || []);
+        setChatTopic(chat.topic || "Untitled");
+      });
+  };
+
+  const createNewChat = () => {
+    const newId = `chat-${Date.now()}`;
+    setCurrentChatId(newId);
+    setInitialMessages([]);
+    setChatTopic("New Conversation");
+  };
+
+  const handleClearChat = () => {
+    fetch(`/api/chat/${chatId}`, { method: 'DELETE' });
+    toast.success('Chat deleted');
+    window.location.reload();
+  };
 
   // Dark mode class on <html>
   useEffect(() => {
@@ -298,15 +354,23 @@ export default function App() {
   if (isHistoryLoaded) {
     // console.log('Chat history loaded, rendering ChatUI with messages:', initialMessages);
     return (
-      <>
-        <ChatUI
-          chatId={chatId}
+      <div className='min-h-screen flex flex-row'>
+        <Sidebar
           darkMode={darkMode}
           setDarkMode={setDarkMode}
+          allChats={allChats}
+          currentChatId={currentChatId}
+          switchToChat={switchToChat}
+          createNewChat={createNewChat}
+          handleClearChat={handleClearChat}
+        />
+        <ChatUI
+          darkMode={darkMode}
+          chatId={chatId}
           initialMessages={initialMessages}
         />
         <Toaster position="top-right" />
-      </>
+      </div>
     );
   }
 }

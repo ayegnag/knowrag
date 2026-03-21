@@ -6,11 +6,21 @@ import env from '../../config/env.js';
 import { generateSparseVector } from '../ingest/bm25.ts';
 
 const chatStore = new Map<string, Array<{ role: string; content: string; timestamp?: number }>>();
+const chats = new Map<string, {
+    id: string;
+    topic: string;
+    messages: Array<{ role: string; content: string; timestamp: number }>;
+}>();
 
 export const chatService = {
 
     getHistory(chatId: string) {
         return chatStore.get(chatId) || [];
+    },
+
+    listChats() {
+        return Array.from(chats.values())
+            .sort((a, b) => (b.messages[b.messages.length - 1]?.timestamp || 0) - (a.messages[a.messages.length - 1]?.timestamp || 0));
     },
 
     deleteChat(chatId: string) {
@@ -29,6 +39,67 @@ export const chatService = {
     },
 
     async processChat(userMessage: string, history: Array<{ role: string; content: string; timestamp?: number }>, chatId: string, stream = false) {
+        console.log(`[ProcessChat] user-message`, userMessage);
+
+        // Generate Chat Topic if new chat
+        const isNewChat = history.length === 0;
+
+        let chatTopic = "General Chat";
+
+        // Step -1: Generate chat topic only for brand new chats
+        if (isNewChat) {
+            const topicPrompt = `
+Generate a very short, meaningful topic/title (max 6-8 words) for this new conversation.
+It should be descriptive and natural, like a folder name or note title.
+
+User first message: "${userMessage}"
+
+Respond with ONLY the topic text. No quotes, no explanation, no extra words.
+`;
+
+            try {
+                const topicResponse = await llm.generateChatCompletion([
+                    { role: 'system', content: 'You are a helpful assistant that creates concise chat titles.' },
+                    { role: 'user', content: topicPrompt },
+                ], { temperature: 0.5, max_tokens: 30, stream: false, });
+                let fullContent = '';
+
+                // If it's somehow a stream (edge case)
+                if (topicResponse.data && typeof topicResponse.data.on === 'function') {
+                    await new Promise<void>((resolve, reject) => {
+                        topicResponse.data.on('data', (chunk: Buffer) => {
+                            const lines = chunk.toString().split('\n');
+                            for (const line of lines) {
+                                if (line.trim()) {
+                                    try {
+                                        const parsed = JSON.parse(line);
+                                        if (parsed.message?.content) fullContent += parsed.message.content;
+                                    } catch { }
+                                }
+                            }
+                        });
+
+                        topicResponse.data.on('end', resolve);
+                        topicResponse.data.on('error', reject);
+                    });
+                } else {
+                    // Normal completed topicResponse
+                    fullContent = topicResponse?.choices?.[0]?.message?.content
+                        ?? topicResponse?.message?.content
+                        ?? '';
+                }
+
+                chatTopic = topicResponse.choices[0].message.content.trim().replace(/["']/g, '');
+                console.log(`[Chat] Generated new topic: "${chatTopic}" for chat ${chatId}`);
+            } catch (e) {
+                console.warn('[Chat] Topic generation failed, using default', e);
+            }
+        }
+
+        // ---
+
+
+        const userRequestTimestamp = Date.now();
         // Step 0: Security check
         const security = await runSecurityPipeline(userMessage);
         if (!security.isAllowed) {
@@ -46,7 +117,10 @@ export const chatService = {
 
         // Load existing history if chatId provided
         let fullHistory = chatStore.get(effectiveChatId) || [];
-        if (history && history.length > 0) fullHistory = [...fullHistory, ...history];
+        if (history && history.length > 0) {
+            // fullHistory = [...fullHistory, ...history]            
+            fullHistory = [...history]
+        };
 
 
         // Step 2: Embed the user query
@@ -251,6 +325,7 @@ Answer concisely and professionally.
                 }
 
                 let fullReply = '';
+
                 generationStream.data.on('data', (chunk: Buffer) => {
                     const lines = chunk.toString().split('\n').filter(Boolean);
                     for (const line of lines) {
@@ -263,6 +338,11 @@ Answer concisely and professionally.
                                 console.log('[ProcessChat - Stream] delta:', parsed.message.content);
                             }
                             if (parsed.done) {
+                                fullHistory.push({
+                                    role: 'user',
+                                    content: userMessage,
+                                    timestamp: userRequestTimestamp
+                                });
                                 fullHistory.push({
                                     role: 'assistant',
                                     content: fullReply,

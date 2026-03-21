@@ -5,7 +5,7 @@ import env from './config/env.js';
 import { llm } from './config/llm-providers.js';
 import { vectorDB } from './services/vector-db/qdrant/qdrant.service.ts';
 import { runSecurityPipeline } from './middleware/security/securityPipeline.js';
-import { chatHandler, deleteChatHandler, getHistoryHandler } from './modules/chat/chat.controller.js';
+import { chatHandler, deleteChatHandler, getHistoryHandler, listChatsHandler } from './modules/chat/chat.controller.js';
 
 // We'll import these later as we build modules
 // import chatRouter from './modules/chat/chat.routes';
@@ -141,6 +141,7 @@ app.get('/health/vector-db', async (req: Request, res: Response) => {
 // ────────────────────────────────────────────────
 
 app.post('/api/chat', chatHandler);
+app.get('/api/chats', listChatsHandler);
 app.get('/api/chat/history/:chatId', getHistoryHandler);
 app.delete('/api/chat/:chatId', deleteChatHandler);
 

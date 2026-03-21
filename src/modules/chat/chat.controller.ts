@@ -67,6 +67,11 @@ export async function chatHandler(req: Request, res: Response) {
   }
 }
 
+export async function listChatsHandler(req: Request, res: Response) {
+  const allChats = chatService.listChats();
+  res.json(allChats);
+}
+
 export async function getHistoryHandler(req: Request, res: Response) {
   const { chatId } = req.params;
   const history = chatService.getHistory(chatId);
