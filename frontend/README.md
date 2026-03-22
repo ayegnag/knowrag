@@ -1,73 +1,60 @@
-# React + TypeScript + Vite
+# KnowRAG : Personal & Onboarding Knowledge Chatbot
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**KnowRAG** is a **local-first**, privacy-focused RAG (Retrieval-Augmented Generation) chatbot that lets you chat naturally with your own documents — Obsidian vaults, personal notes, office docs, PDFs, etc.
 
-Currently, two official plugins are available:
+### What makes it special
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Completely **local** (runs on your machine — no cloud, no data leaves your device)
+- Supports **hybrid retrieval** (dense embeddings + BM25 keyword search)
+- Works with **any folder of documents** you point it at (Markdown, PDF, txt, docx…)
+- Built-in safety filters (regex + lightweight classification)
+- Beautiful, modern React UI with dark mode, streaming responses, sidebar chat switching
 
-## React Compiler
+It's intentionally **generic** — change the folder path and it becomes your personal knowledge assistant, team wiki chat, research companion, or second brain.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### Quick Start
 
-## Expanding the ESLint configuration
+#### Backend (Node.js + Express + Qdrant + Ollama)
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+#### 1. Clone & install
+```bash
+git clone https://github.com/yourusername/knowrag.git
+cd knowrag
+npm install
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+#### 2. Start Ollama + pull models (in separate terminals)
+```bash
+ollama serve
+ollama pull sam860/dolphin3-qwen2.5:3b-Q5_K_M
+ollama pull qwen2.5:3b-embedding
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+#### 3. Start Qdrant (Docker recommended)
+```bash
+docker run -d -p 6333:6333 -p 6334:6334 \
+  -v $(pwd)/qdrant_storage:/qdrant/storage \
+  qdrant/qdrant
 ```
+
+#### 4. Run backend
+```bash
+npm run dev
+```
+
+#### 5. Run Frontend (React + Vite)
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Open http://localhost:5173
+
+#### To Ingest your documents
+```bash
+curl -X POST http://localhost:3000/api/ingest/folder \
+  -H "Content-Type: application/json" \
+  -d '{"folderPath": "/path/to/your/Obsidian Vault"}'
+```
+
+Now chat with your notes!

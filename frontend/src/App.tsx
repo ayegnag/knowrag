@@ -141,7 +141,7 @@ function ChatUI({ chatId, darkMode, initialMessages, forwardedTextareaRef }: Cha
               <div className="text-center py-20 text-muted-foreground">
                 <h2 className="text-2xl font-medium mb-5">Welcome to your personal AI chat</h2>
                 <p className="max-w-md mx-auto">
-                  Ask anything about onboarding, company policies, your Obsidian notes, brag docs, or projects.
+                  Ask anything about your local Obsidian notes, office docs, or projects.
                 </p>
               </div>
             )}
