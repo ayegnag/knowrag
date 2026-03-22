@@ -8,6 +8,16 @@ import { Loader2, Send, Moon, Sun, Trash2 } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { Textarea } from './components/ui/textarea';
+import {
+  SidebarTrigger,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarHeader
+} from "@/components/ui/sidebar"
+
+
 // import { Separator } from 'radix-ui';
 // import {
 //   Item,
@@ -107,10 +117,18 @@ function ChatUI({ chatId, darkMode, initialMessages }: ChatUIProps) {
   // console.log('Rendering ChatUI with messages:', messages);
 
   return (
-    <div className={cn('min-h-screen flex flex-col w-full', darkMode ? 'dark bg-gray-950' : 'bg-gray-50')}>
+    <div className={cn('h-screen overflow-hidden flex flex-col w-full', darkMode ? 'dark bg-gray-950' : 'bg-gray-50')}>
       {/* Messages */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-background">
-        <ScrollArea className="flex-1 px-4 py-6">
+      <main className="flex-1 flex flex-col overflow-hidden bg-background min-h-0 relative">
+        
+        {/* Floating SidebarTrigger */}
+        <div className="absolute top-3 left-3 z-20">
+          <SidebarTrigger/>
+        </div>
+
+        {/* Chat Area */}
+        <ScrollArea className="flex-1 min-h-0 px-4 pt-6 pb-0">
+
           <div className="max-w-5xl mx-auto space-y-6 pb-24">
             {messages.length === 0 && (
               <div className="text-center py-20 text-muted-foreground">
@@ -187,7 +205,7 @@ function ChatUI({ chatId, darkMode, initialMessages }: ChatUIProps) {
         <div className="border-t bg-background/80 backdrop-blur-sm">
           <form
             onSubmit={handleSubmit}
-            className="max-w-5xl mx-auto p-4 flex gap-3 items-end"
+            className="max-w-3xl mx-auto p-4 flex gap-3 items-end"
           >
             <Textarea
               ref={textareaRef}
@@ -219,55 +237,47 @@ function ChatUI({ chatId, darkMode, initialMessages }: ChatUIProps) {
 }
 
 // ─────────────────────────────────────────────
-// Sidebar — lists all chats, allows switching & creating new
+// AppSidebar — lists all chats, allows switching & creating new
 // ─────────────────────────────────────────────
-function Sidebar({ darkMode, setDarkMode, allChats, currentChatId, chatTopic, switchToChat, createNewChat, handleClearChat }: SidebarProps) {
+function AppSidebar({ darkMode, setDarkMode, allChats, currentChatId, chatTopic, switchToChat, createNewChat, handleClearChat }: SidebarProps) {
   return (
-    <aside className="min-h-screen w-72 border-r bg-card flex flex-col">
-      {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
-          <div className='flex flex-row'>
-            <img src="/knowrag-icon.svg" alt="Knowrag Logo" className="h-6 w-6 inline-block mr-2 mt-1" />
-            <h4 className="text-xl md:text-2xl mt-0 mb-0 font-bold tracking-tight">
-              Knowrag
-            </h4>
-          </div>
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setDarkMode(!darkMode)}
-              aria-label="Toggle dark mode"
-            >
-              {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-            </Button>
-          </div>
+    <Sidebar variant='sidebar'>
+      <SidebarHeader>
+        <div className='flex flex-row'>
+          <img src="/knowrag-icon.svg" alt="Knowrag Logo" className="h-6 w-6 inline-block mr-2 mt-1" />
+          <h4 className="text-xl md:text-2xl mt-0 mb-0 font-bold tracking-tight">
+            Knowrag
+          </h4>
         </div>
-      </header>
-      
-      {/* <Item>
-        <ItemContent>
-          <ItemTitle>{chatTopic}</ItemTitle>
-        </ItemContent>
-      </Item> */}
-
-      <Button variant="destructive" size="sm" onClick={handleClearChat}>
-        <Trash2 className="h-4 w-4 mr-2" /> Clear Chat
-      </Button>
-      <Button onClick={createNewChat} className="m-3">+ New Chat</Button>
-      <ScrollArea className="flex-1">
+      </SidebarHeader>
+      <SidebarContent>
         {allChats.map((c: any) => (
           <button
             key={c.chatId}
             onClick={() => switchToChat(c.chatId)}
             className={`w-full text-left px-4 py-3 hover:bg-accent ${currentChatId === c.chatId ? 'bg-accent' : ''}`}>
             <div className="font-medium truncate">{c.topic}</div>
-            <div className="text-xs text-muted-foreground truncate">{c.messages?.[c.messages.length - 1]?.content?.slice(0, 40)}...</div>
+            {/* <div className="text-xs text-muted-foreground truncate">{c.messages?.[c.messages.length - 1]?.content?.slice(0, 40)}...</div> */}
           </button>
         ))}
-      </ScrollArea>
-    </aside>);
+        {/* <SidebarGroup />
+        <SidebarGroup /> */}
+      </SidebarContent>
+      <SidebarFooter>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setDarkMode(!darkMode)}
+            aria-label="Toggle dark mode"
+          >
+            {darkMode ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </Button>
+        </div>
+      </SidebarFooter>
+    </Sidebar>
+  );
+
 }
 
 // ─────────────────────────────────────────────
@@ -360,12 +370,11 @@ export default function App() {
     );
   }
 
-  // ✅ ChatUI mounts here — initialMessages is finalized, no race condition
   if (isHistoryLoaded) {
     // console.log('Chat history loaded, rendering ChatUI with messages:', initialMessages);
     return (
-      <div className='min-h-screen flex flex-row'>
-        <Sidebar
+      <div className='min-h-full flex w-full'>
+        <AppSidebar
           darkMode={darkMode}
           setDarkMode={setDarkMode}
           allChats={allChats}
